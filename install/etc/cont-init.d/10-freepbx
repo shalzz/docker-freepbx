@@ -45,6 +45,10 @@ ln -sf /data/home/asterisk /home/asterisk
 chown -R asterisk. /data
 chmod +x /usr/lib/asterisk/modules/*
 
+## Hacks
+ln -s /usr/sbin/crontab /usr/bin/crontab
+#rm -rf /etc/services.available/03-monitoring
+
 ### Check if FreePBX installed
 if [ ! -f "$WEBROOT"/admin/index.php ]; then
   print_info "New install detected - please wait while we fetch FreePBX - will take up to 30 minutes!"
@@ -80,10 +84,6 @@ EOF
   mkdir -p /usr/src/freepbx
   cd /usr/src || exit
   curl -L http://mirror.freepbx.org/modules/packages/freepbx/freepbx-15.0-latest.tgz | tar xfz - --strip 1 -C /usr/src/freepbx
-
-## Our Hacks
-  ln -s /usr/sbin/crontab /usr/bin/crontab
-  rm -rf /etc/services.available/03-monitoring
 
   silent sudo -u asterisk gpg --refresh-keys --keyserver hkp://keyserver.ubuntu.com:80
   silent sudo -u asterisk gpg --import /usr/src/freepbx/amp_conf/htdocs/admin/libraries/BMO/1588A7366BD35B34.key
