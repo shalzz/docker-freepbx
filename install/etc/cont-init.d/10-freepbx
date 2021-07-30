@@ -13,7 +13,7 @@ fi
 ### Startup
 if [ ! -f /data/.installed ]; then
   print_notice "Creating default configuration files"
-  mkdir -p /data
+  mkdir -p /data/db
   cp -R /assets/config/* /data/
 fi
 
@@ -79,7 +79,11 @@ EOF
 
   mkdir -p /usr/src/freepbx
   cd /usr/src || exit
-  curl -ssL https://github.com/FreePBX/framework/archive/release/"${FREEPBX_VERSION}".tar.gz| tar xfz - --strip 1 -C /usr/src/freepbx
+  curl -L http://mirror.freepbx.org/modules/packages/freepbx/freepbx-15.0-latest.tgz | tar xfz - --strip 1 -C /usr/src/freepbx
+
+## Our Hacks
+  ln -s /usr/sbin/crontab /usr/bin/crontab
+  rm -rf /etc/services.available/03-monitoring
 
   silent sudo -u asterisk gpg --refresh-keys --keyserver hkp://keyserver.ubuntu.com:80
   silent sudo -u asterisk gpg --import /usr/src/freepbx/amp_conf/htdocs/admin/libraries/BMO/1588A7366BD35B34.key
@@ -241,7 +245,7 @@ EOF
 
   if var_true "$ENABLE_XMPP" ;  then
     print_notice "- xmpp"
-    silent mongod --unixSocketPrefix=/var/run/mongodb --config /etc/mongod.conf run &
+    silent mongod --unixSocketPrefix=/var/run/mongodb run &
     check_process
     silent fwconsole ma downloadinstall xmpp
     sed -i 's/uri: mongodb:\/\/localhost\/letschat/uri: mongodb:\/\/localhost:27017\/letschat?useNewUrlParser=true/g' "$WEBROOT"/admin/modules/xmpp/node/node_modules/lets-chat/settings.yml
@@ -595,7 +599,7 @@ chown asterisk:asterisk /usr/sbin/watson-transcription
 silent service apache2 restart
 
 if var_true "$ENABLE_XMPP" ;  then
-  silent mongod --unixSocketPrefix=/var/run/mongodb --config /etc/mongod.conf --shutdown
+  silent mongod --unixSocketPrefix=/var/run/mongodb --shutdown
 fi
 
 if var_true "$UCP_FIRST" ; then
