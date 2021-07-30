@@ -7,7 +7,6 @@ ENV ASTERISK_VERSION=17.9.3 \
     DONGLE_VERSION=20200610 \
     G72X_CPUHOST=penryn \
     G72X_VERSION=0.1 \
-    MONGODB_VERSION=4.2 \
     PHP_VERSION=5.6 \
     SPANDSP_VERSION=20180108 \
     RTP_START=18000 \
@@ -23,8 +22,6 @@ RUN echo "Package: libxml2*" > /etc/apt/preferences.d/libxml2 && \
     set -x && \
     curl -sSLk https://packages.sury.org/php/apt.gpg | apt-key add - && \
     echo "deb https://packages.sury.org/php/ buster main" > /etc/apt/sources.list.d/deb.sury.org.list && \
-    curl -sSLk https://www.mongodb.org/static/pgp/server-${MONGODB_VERSION}.asc | apt-key add - && \
-    echo "deb http://repo.mongodb.org/apt/debian buster/mongodb-org/${MONGODB_VERSION} main" > /etc/apt/sources.list.d/mongodb-org.list && \
     echo "deb http://ftp.us.debian.org/debian/ buster-backports main" > /etc/apt/sources.list.d/backports.list && \
     echo "deb-src http://ftp.us.debian.org/debian/ buster-backports main" >> /etc/apt/sources.list.d/backports.list && \
     apt-get update && \
@@ -84,7 +81,6 @@ RUN echo "Package: libxml2*" > /etc/apt/preferences.d/libxml2 && \
                         libvpb-dev \
                         libxml2-dev \
                         libxslt1-dev \
-                        linux-headers \
                         portaudio19-dev \
                         python-dev \
                         subversion \
@@ -130,9 +126,8 @@ RUN echo "Package: libxml2*" > /etc/apt/preferences.d/libxml2 && \
                     make \
                     mariadb-client \
                     mariadb-server \
-                    mongodb-org \
                     mpg123 \
-                    odbc-mariadb \
+                    #odbc-mariadb \
                     php${PHP_VERSION} \
                     php${PHP_VERSION}-curl \
                     php${PHP_VERSION}-cli \
@@ -158,22 +153,21 @@ RUN echo "Package: libxml2*" > /etc/apt/preferences.d/libxml2 && \
                     uuid \
                     wget \
                     whois \
-                    xmlstarlet && \
-    \
+                    xmlstarlet 
 ### Add users
-    addgroup --gid 2600 asterisk && \
-    adduser --uid 2600 --gid 2600 --gecos "Asterisk User" --disabled-password asterisk && \
-    \
+RUN addgroup --gid 2600 asterisk && \
+    adduser --uid 2600 --gid 2600 --gecos "Asterisk User" --disabled-password asterisk
+
 ### Build SpanDSP
-    mkdir -p /usr/src/spandsp && \
+RUN mkdir -p /usr/src/spandsp && \
     curl -ssLk http://sources.buildroot.net/spandsp/spandsp-${SPANDSP_VERSION}.tar.gz | tar xvfz - --strip 1 -C /usr/src/spandsp && \
     cd /usr/src/spandsp && \
     ./configure --prefix=/usr && \
     make && \
-    make install && \
-    \
+    make install
+
 ### Build Asterisk
-    cd /usr/src && \
+RUN cd /usr/src && \
     mkdir -p asterisk && \
     curl -sSLk http://downloads.asterisk.org/pub/telephony/asterisk/releases/asterisk-${ASTERISK_VERSION}.tar.gz | tar xvfz - --strip 1 -C /usr/src/asterisk && \
     cd /usr/src/asterisk/ && \
@@ -226,47 +220,60 @@ RUN echo "Package: libxml2*" > /etc/apt/preferences.d/libxml2 && \
     make && \
     make install && \
     make install-headers && \
-    make config && \
-    \
+    make config
+
 #### Add G729 codecs
-    git clone https://github.com/BelledonneCommunications/bcg729 /usr/src/bcg729 && \
+RUN git clone https://github.com/BelledonneCommunications/bcg729 /usr/src/bcg729 && \
     cd /usr/src/bcg729 && \
     git checkout tags/$BCG729_VERSION && \
     ./autogen.sh && \
     ./configure --prefix=/usr --libdir=/lib && \
     make && \
-    make install && \
-    \
-    mkdir -p /usr/src/asterisk-g72x && \
+    make install
+
+RUN mkdir -p /usr/src/asterisk-g72x && \
     curl -sSLk https://bitbucket.org/arkadi/asterisk-g72x/get/master.tar.gz | tar xvfz - --strip 1 -C /usr/src/asterisk-g72x && \
     cd /usr/src/asterisk-g72x && \
     ./autogen.sh && \
-    ./configure --prefix=/usr --with-bcg729 --enable-$G72X_CPUHOST && \
+    ./configure CFLAGS='-march=armv8-a' --prefix=/usr --with-bcg729 --enable-$G72X_CPUHOST && \
     make && \
-    make install && \
-    \
+    make install
+
+### Build MardiaDB connector
+RUN apt-get install -y cmake gcc && \
+       cd /usr/src && \
+       git clone https://github.com/MariaDB/mariadb-connector-odbc.git && \
+       cd mariadb-connector-odbc && \
+       git checkout tags/3.1.1-ga && \
+       mkdir build && \
+       cd build && \
+       cmake ../ -LH -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local -DWITH_SSL=OPENSSL\
+       -DDM_DIR=/usr/lib/aarch64-linux-gnu -DCMAKE_C_FLAGS_RELEASE:STRING="-w" && \
+       cmake --build . --config Release && \
+       make install
+
 #### Add USB Dongle support
-    git clone https://github.com/rusxakep/asterisk-chan-dongle /usr/src/asterisk-chan-dongle && \
+RUN git clone https://github.com/shalzz/asterisk-chan-dongle /usr/src/asterisk-chan-dongle && \
     cd /usr/src/asterisk-chan-dongle && \
-    git checkout tags/$DONGLE_VERSION && \
+#   git checkout tags/$DONGLE_VERSION && \
     ./bootstrap && \
     ./configure --with-astversion=$ASTERISK_VERSION && \
     make && \
     make install && \
     \
-    ldconfig && \
-    \
+    ldconfig
+
 ### Cleanup
-    mkdir -p /var/run/fail2ban && \
+RUN mkdir -p /var/run/fail2ban && \
     cd / && \
     rm -rf /usr/src/* /tmp/* /etc/cron* && \
     apt-get purge -y $ASTERISK_BUILD_DEPS && \
     apt-get -y autoremove && \
     apt-get clean && \
-    rm -rf /var/lib/apt/lists/* && \
-    \
+    rm -rf /var/lib/apt/lists/*
+
 ### FreePBX hacks
-    sed -i -e "s/memory_limit = 128M/memory_limit = 256M/g" /etc/php/${PHP_VERSION}/apache2/php.ini && \
+RUN sed -i -e "s/memory_limit = 128M/memory_limit = 256M/g" /etc/php/${PHP_VERSION}/apache2/php.ini && \
     sed -i 's/\(^upload_max_filesize = \).*/\120M/' /etc/php/${PHP_VERSION}/apache2/php.ini && \
     a2disconf other-vhosts-access-log.conf && \
     a2enmod rewrite && \
@@ -292,9 +299,6 @@ RUN echo "Package: libxml2*" > /etc/apt/preferences.d/libxml2 && \
     mkdir -p /assets/config/var/spool && \
     mv /var/spool/cron /assets/config/var/spool/ && \
     ln -s /data/var/spool/cron /var/spool/cron && \
-    mkdir -p /var/run/mongodb && \
-    rm -rf /var/lib/mongodb && \
-    ln -s /data/var/lib/mongodb /var/lib/mongodb && \
     ln -s /data/var/run/asterisk /var/run/asterisk && \
     rm -rf /var/spool/asterisk && \
     ln -s /data/var/spool/asterisk /var/spool/asterisk && \
